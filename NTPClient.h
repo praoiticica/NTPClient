@@ -38,6 +38,7 @@ class NTPClient {
 
     /**
      * Starts the underlying UDP client with the default local port
+     * and set _udpSetup = true.
      */
     void begin();
 
