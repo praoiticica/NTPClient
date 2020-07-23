@@ -109,9 +109,11 @@ bool NTPClient::forceUpdate() {
     
     if (timeout > 100) return false; // timeout after 1000 ms
     timeout++;
-  } while (cb == 0);	
-  
-  this->_lastUpdate = millis() - (10 * (timeout + 1)); // Account for delay(10) in reading the time and the below operations until return true..
+  } while (cb == 0);
+	
+  // Account for delay(10) and 10 for operations inside do{}
+  // plus 5 ms to account for the the below operations until return true..
+  this->_lastUpdate = millis() - timeout*(10 + 10) + 5  ; 
 
   unsigned long highWord = word(this->_packetBuffer[40], this->_packetBuffer[41]);
   unsigned long lowWord = word(this->_packetBuffer[42], this->_packetBuffer[43]);
