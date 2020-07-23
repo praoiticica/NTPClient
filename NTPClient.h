@@ -47,8 +47,9 @@ class NTPClient {
     void begin(int port);
 
     /**
-     * This should be called in the main loop of your application. By default an update from the NTP Server is only
-     * made every 60 seconds. This can be configured in the NTPClient constructor.
+     * This should be called in the main loop of your application. 
+     * By default an update from the NTP Server is only made every 60 seconds.
+     * This can be configured in the NTPClient constructor or in setUpdateInterval function.
      *
      * @return true on success, false on failure
      */
