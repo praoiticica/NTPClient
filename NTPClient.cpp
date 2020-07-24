@@ -60,28 +60,13 @@ void NTPClient::begin(int port) {
   this->_udpSetup = true;
 }
 
-bool NTPClient::isValid(byte * ntpPacket)
-{
-	//Perform a few validity checks on the packet
-	if((ntpPacket[0] & 0b11000000) == 0b11000000)		//Check for LI=UNSYNC
-		return false;
-		
-	if((ntpPacket[0] & 0b00111000) >> 3 < 0b100)		//Check for Version >= 4
-		return false;
-		
-	if((ntpPacket[0] & 0b00000111) != 0b100)			//Check for Mode == Server
-		return false;
-		
-	if((ntpPacket[1] < 1) || (ntpPacket[1] > 15))		//Check for valid Stratum
-		return false;
-
-	if(	ntpPacket[16] == 0 && ntpPacket[17] == 0 && 
-		ntpPacket[18] == 0 && ntpPacket[19] == 0 &&
-		ntpPacket[20] == 0 && ntpPacket[21] == 0 &&
-		ntpPacket[22] == 0 && ntpPacket[22] == 0)		//Check for ReferenceTimestamp != 0
-		return false;
-
-	return true;
+bool NTPClient::update() {
+  if ((millis() - this->_lastUpdate >= this->_updateInterval)     // Update after _updateInterval
+    || this->_lastUpdate == 0) {                                // Update if there was no update yet.
+    if (!this->_udpSetup) this->begin();                         // If udpSetup= false, call begin() again to set udp port value.
+    return this->forceUpdate();
+  }
+  return true;
 }
 
 bool NTPClient::forceUpdate() {
@@ -97,8 +82,8 @@ bool NTPClient::forceUpdate() {
   byte timeout = 0;
   int cb = 0;
   do {
-    delay ( 10 );
-    cb = this->_udp->parsePacket();
+    delay (10);
+    cb = this->_udp->parsePacket(); //the momment when epoch is acquired.
     
     if(cb > 0)
     {
@@ -110,9 +95,9 @@ bool NTPClient::forceUpdate() {
     if (timeout > 100) return false; // timeout after 1000 ms
     timeout++;
   } while (cb == 0);
-	
-  // Account for delay(10) and 5 ms for operations inside do{}
-  this->_lastUpdate = millis() - timeout*(10 + 5); 
+
+  // Account for delay(10).
+  this->_lastUpdate = millis() - timeout*(10);
 
   unsigned long highWord = word(this->_packetBuffer[40], this->_packetBuffer[41]);
   unsigned long lowWord = word(this->_packetBuffer[42], this->_packetBuffer[43]);
@@ -125,12 +110,27 @@ bool NTPClient::forceUpdate() {
   return true;
 }
 
-bool NTPClient::update() {
-  if ((millis() - this->_lastUpdate >= this->_updateInterval)     // Update after _updateInterval
-    || this->_lastUpdate == 0) {                                // Update if there was no update yet.
-    if (!this->_udpSetup) this->begin();                         // If udpSetup= false, call begin() again to set udp port value.
-    return this->forceUpdate();
-  }
+bool NTPClient::isValid(byte * ntpPacket)
+{
+  //Perform a few validity checks on the packet
+  if((ntpPacket[0] & 0b11000000) == 0b11000000)   //Check for LI=UNSYNC
+    return false;
+    
+  if((ntpPacket[0] & 0b00111000) >> 3 < 0b100)    //Check for Version >= 4
+    return false;
+    
+  if((ntpPacket[0] & 0b00000111) != 0b100)      //Check for Mode == Server
+    return false;
+    
+  if((ntpPacket[1] < 1) || (ntpPacket[1] > 15))   //Check for valid Stratum
+    return false;
+
+  if( ntpPacket[16] == 0 && ntpPacket[17] == 0 && 
+    ntpPacket[18] == 0 && ntpPacket[19] == 0 &&
+    ntpPacket[20] == 0 && ntpPacket[21] == 0 &&
+    ntpPacket[22] == 0 && ntpPacket[22] == 0)   //Check for ReferenceTimestamp != 0
+    return false;
+
   return true;
 }
 
@@ -153,8 +153,9 @@ int NTPClient::getSeconds() {
   return (this->getEpochTime() % 60);
 }
 
-String NTPClient::getFormattedTime(unsigned long secs) {
-  unsigned long rawTime = secs ? secs : this->getEpochTime();
+String NTPClient::getFormattedTime(unsigned long secs) {  
+  unsigned long rawTime = secs ? secs : this->getEpochTime(); //in seconds
+
   unsigned long hours = (rawTime % 86400L) / 3600;
   String hoursStr = hours < 10 ? "0" + String(hours) : String(hours);
 
@@ -169,15 +170,15 @@ String NTPClient::getFormattedTime(unsigned long secs) {
 
 // Based on https://github.com/PaulStoffregen/Time/blob/master/Time.cpp
 // currently assumes UTC timezone, instead of using this->_timeOffset
-String NTPClient::getFormattedDate(unsigned long secs) {
-  unsigned long rawTime = (secs ? secs : this->getEpochTime()) / 86400L;  // in days
+String NTPClient::getFormattedISODate(unsigned long secs) {
+  unsigned long rawdate = (secs ? secs : this->getEpochTime()) / 86400L;  // in days since 1970.
   unsigned long days = 0, year = 1970;
   uint8_t month;
   static const uint8_t monthDays[]={31,28,31,30,31,30,31,31,30,31,30,31};
 
-  while((days += (LEAP_YEAR(year) ? 366 : 365)) <= rawTime)
+  while((days += (LEAP_YEAR(year) ? 366 : 365)) <= rawdate)
     year++;
-  rawTime -= days - (LEAP_YEAR(year) ? 366 : 365); // now it is days in this year, starting at 0
+  rawdate -= days - (LEAP_YEAR(year) ? 366 : 365); // now rawdate stores the n of remaining days in current year, starting at 0
   days=0;
   for (month=0; month<12; month++) {
     uint8_t monthLength;
@@ -186,12 +187,37 @@ String NTPClient::getFormattedDate(unsigned long secs) {
     } else {
       monthLength = monthDays[month];
     }
-    if (rawTime < monthLength) break;
-    rawTime -= monthLength;
+    if (rawdate < monthLength) break;
+    rawdate -= monthLength;
   }
   String monthStr = ++month < 10 ? "0" + String(month) : String(month); // jan is month 1  
-  String dayStr = ++rawTime < 10 ? "0" + String(rawTime) : String(rawTime); // day of month  
-  return String(year) + "-" + monthStr + "-" + dayStr + "T" + this->getFormattedTime(secs ? secs : 0) + "Z";
+  String dayStr = ++rawdate < 10 ? "0" + String(rawdate) : String(rawdate); // day of month  
+  return String(year) + "-" + monthStr + "-" + dayStr + "T" + this->getFormattedTime() + " " "Z";
+}
+
+String NTPClient::getMyDate(unsigned long secs) {
+  unsigned long rawdate = (secs ? secs : this->getEpochTime()) / 86400L;  // in days since 1970.
+  unsigned long days = 0, year = 1970;
+  uint8_t month;
+  static const uint8_t monthDays[]={31,28,31,30,31,30,31,31,30,31,30,31};
+
+  while((days += (LEAP_YEAR(year) ? 366 : 365)) <= rawdate)
+    year++;
+  rawdate -= days - (LEAP_YEAR(year) ? 366 : 365); // now rawdate stores the n of remaining days in current year, starting at 0
+  days=0;
+  for (month=0; month<12; month++) {
+    uint8_t monthLength;
+    if (month==1) { // february
+      monthLength = LEAP_YEAR(year) ? 29 : 28;
+    } else {
+      monthLength = monthDays[month];
+    }
+    if (rawdate < monthLength) break;
+    rawdate -= monthLength;
+  }
+  String monthStr = ++month < 10 ? "0" + String(month) : String(month); // jan is month 1  
+  String dayStr = ++rawdate < 10 ? "0" + String(rawdate) : String(rawdate); // day of month  
+  return dayStr + "-" + monthStr + "-" + String(year);
 }
 
 void NTPClient::end() {

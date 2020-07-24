@@ -80,20 +80,28 @@ class NTPClient {
     void setUpdateInterval(unsigned long updateInterval);
 
     /**
+     * @return time in seconds since Jan. 1, 1970
+     */
+    unsigned long getEpochTime();
+    
+
+    /**
     * @return secs argument (or 0 for current time) formatted like `hh:mm:ss`
     */
     String getFormattedTime(unsigned long secs = 0);
 
-    /**
-     * @return time in seconds since Jan. 1, 1970
-     */
-    unsigned long getEpochTime();
-  
+    
     /**
     * @return secs argument (or 0 for current date) formatted to ISO 8601
     * like `2004-02-12T15:19:21+00:00`
     */
-    String getFormattedDate(unsigned long secs = 0);
+    String getFormattedISODate(unsigned long secs = 0);  
+  
+    /**
+    * @return secs argument (or 0 for current date) formatted to
+    * like `12-02-2004  dd-mm-yyy.
+    */
+    String getMyDate(unsigned long secs = 0);
 
     /**
      * Stops the underlying UDP client
